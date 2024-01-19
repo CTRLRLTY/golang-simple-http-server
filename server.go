@@ -106,7 +106,6 @@ func (sh *sharedHandler) handleCreateData(writer http.ResponseWriter, request *h
 
 		sh.mux.Unlock()
 
-		writer.Header().Set("Last-Modified", newData.LastModified)
 		writer.Header().Set("Content-Location", fmt.Sprintf("%s?id=%d", kREAD_DATA_API, newData.Id))
 		writer.WriteHeader(http.StatusCreated)
 	}
