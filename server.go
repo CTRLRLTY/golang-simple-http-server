@@ -218,7 +218,7 @@ func main() {
 			log.Fatalf("ERROR: %s is not a valid port number\n", words[1])
 		}
 
-		if portAsInt < 0 && portAsInt >= 65535 {
+		if portAsInt > 65535 && portAsInt < 0 {
 			log.Fatalf("ERROR: the port %s is not IANA standard port\n", words[1])
 		}
 
