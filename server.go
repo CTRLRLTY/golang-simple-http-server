@@ -7,17 +7,22 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 )
+
+const kCREATE_DATA_API = "/create-data"
+const kREAD_DATA_API = "/get-data"
+const kUPDATE_DATA_API = "/update-data"
+const kDELETE_DATA_API = "/delete-data"
 
 type sharedHandler struct {
 	jsonFilePath string
 	vecJsonMap   []DataJsonMap
-	mux          sync.Mutex
+	// mux          sync.Mutex
 }
 
 func displaySummaryHelp() {
@@ -35,22 +40,73 @@ func displaySummaryHelp() {
 			"The JSON file must follow the following scheme: \"[{id: <UINT>, value: <STRING>}, ...]\""+"\n"+
 			"where the 'id' field signifies a unique identifier for a specified entry, and the 'value' field signifies the value of the entry."+"\n"+
 			"\n"+
+			"API USAGE"+"\n"+
+			"	GET /create-data?id=<INT> returns a JSON data entry specified by the 'id' parameter."+"\n"+
+			"Setting the id parameter to -1 will return all JSON entries"+"\n"+
+			"\n"+
 			"AUTHOR: Muhammad Raznan"+"\n",
 
 		filepath.Base(os.Args[0]))
 }
 
+func findData(vecData []DataJsonMap, id int) (found DataJsonMap, err error) {
+	err = fmt.Errorf("data %d does not exists", id)
+
+	for _, datum := range vecData {
+		if id == datum.Id {
+			found = datum
+			err = nil
+			break
+		}
+	}
+
+	return
+}
+
 func (sh *sharedHandler) handleCreateData(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
-	case "POST":
-		// Create data
+	case "PUT":
+		var (
+			reqDataId int
+		)
+
+		writer.Header().Set("Content-Location", fmt.Sprintf("%s?id=%d", kREAD_DATA_API, reqDataId))
 	}
 }
 
 func (sh *sharedHandler) handleGetData(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
 	case "GET":
-		// Get data
+		var dataId int
+
+		qParams, err := url.ParseQuery(request.URL.RawQuery)
+
+		if err != nil {
+			http.Error(writer, ":(", http.StatusBadRequest)
+			return
+		}
+
+		dataId, err = strconv.Atoi(qParams.Get("id"))
+
+		if err != nil {
+			http.Error(writer, ":-( ", http.StatusBadRequest)
+			return
+		}
+
+		if dataId == -1 {
+			json.NewEncoder(writer).Encode(sh.vecJsonMap)
+		} else {
+			var responseData DataJsonMap
+
+			responseData, err = findData(sh.vecJsonMap, dataId)
+
+			if err != nil {
+				http.Error(writer, ":O", http.StatusBadRequest)
+				return
+			}
+
+			json.NewEncoder(writer).Encode(responseData)
+		}
 	}
 }
 
@@ -69,10 +125,10 @@ func (sh *sharedHandler) handleDeleteData(writer http.ResponseWriter, request *h
 }
 
 func runServe(sh *sharedHandler, ipaddr, port string) {
-	http.HandleFunc("/create-data", sh.handleCreateData)
-	http.HandleFunc("/get-data", sh.handleGetData)
-	http.HandleFunc("/update-data", sh.handleUpdateData)
-	http.HandleFunc("/delete-data", sh.handleDeleteData)
+	http.HandleFunc(kCREATE_DATA_API, sh.handleCreateData)
+	http.HandleFunc(kREAD_DATA_API, sh.handleGetData)
+	http.HandleFunc(kUPDATE_DATA_API, sh.handleUpdateData)
+	http.HandleFunc(kDELETE_DATA_API, sh.handleDeleteData)
 
 	if err := http.ListenAndServe(ipaddr+":"+port, nil); err != nil {
 		log.Fatalf("Error: %s", err.Error())
@@ -101,13 +157,13 @@ func main() {
 		ipAddrPtr := serveCmd.String("address", "localhost:80", "is used to specify the IPv4 address for the server to listen to. (Default: localhost:80)")
 		jsonPathPtr := serveCmd.String("file", "file.json", "JSON_PATH is used to specify a JSON file-based database for simple persistence mechanism")
 
-		if len(os.Args) < 3 {
+		if len(os.Args) > 2 {
 			serveCmd.Parse(os.Args[2:])
-		}
 
-		if os.Args[2] == "help" {
-			serveCmd.Usage()
-			os.Exit(1)
+			if os.Args[2] == "help" {
+				serveCmd.Usage()
+				os.Exit(1)
+			}
 		}
 
 		words = strings.Split(*ipAddrPtr, ":")
