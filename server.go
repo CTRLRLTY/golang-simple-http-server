@@ -35,18 +35,21 @@ func displaySummaryHelp() {
 			"\n"+
 			"SUBCOMMAND: serve"+"\n"+
 			"The serve command starts the server using the default settings."+"\n"+
-			"    --address is used to specify the IPv4 address for the server to listen to. (Default: localhost:80)"+"\n"+
-			"    --file JSON_PATH is used to specify a JSON file-based database for simple persistence mechanism"+"\n"+
+			"    --address is used to specify the address for the server to listen to. (default \"localhost:80\")"+"\n"+
+			"    --file JSON_PATH is used to specify a JSON file-based database for simple persistence mechanism. If the file path does not exists, it will create one, assuming the directory is present. (default \"file.json\")"+"\n"+
 			"\n"+
 			"JSON FILE SCHEMATICS"+"\n"+
-			"The JSON file must follow the following scheme: \"[{id: <UINT>, value: <STRING>}, ...]\""+"\n"+
+			"The JSON file must follow the following scheme: \"[{id: <UINT>, name: <STRING>, value: <STRING>, last_modified: <STRING>}, ...]\""+"\n"+
 			"where the 'id' field signifies a unique identifier for a specified entry, and the 'value' field signifies the value of the entry."+"\n"+
 			"\n"+
 			"API USAGE"+"\n"+
-			"	GET /get-data?id=<INT> returns a JSON data entry specified by the 'id' parameter."+"\n"+
-			"Setting the id parameter to -1 will return all JSON entries"+"\n"+
+			"	PUT /create-data?name=<STRING>[&value=<STRING>] is used to create a new data entry. The 'name' parameter defines the entry, and it must be unique. An optional 'value' parameter can also be set. If not, the entry will have an emptry string value. The response status 201 indicates successful entry creation. The response status 400 will be returned for malformed queries."+"\n"+
 			"\n"+
-			"	PUT /create-data?value=<STRING> creates a data entry with the specified value."+"\n"+
+			"	GET /get-data?<id=<INT>|name=<STRING>> returns a JSON data entry specified by the 'id' parameter. Setting 'id' -1 will return all JSON entries. You can also retrieve the data entry by 'name'. You can't use both 'id' and 'name' in conjunction. The response status 200 indicates succesful entry retrieval, which carries the message as JSON format. The response status 400 will be returned for malformed queries."+"\n"+
+			"\n"+
+			"	POST /update-data?name=<STRING>[&value=<STRING>] updates the specified entry value. The 'name' parameters specifies the target entry, and an optional 'value' can be set, if not the value will be an empty string. The status code 204 indicates successful modification. The response status 400 will be returned for malformed queries and undefined entries."+"\n"+
+			"\n"+
+			"	DELETE /delete-data?<id=<INT>|name=<STRING>> deletes the specified entry. A 'name' or 'id' parameter can be used to specify the target entry, but it can't be used in conjunction. Setting 'id' to -1 will delete all entries an returns a null message. Successful deletion will return status 204. Malformed queries will return 400 response status."+"\n"+
 			"\n"+
 			"AUTHOR: Muhammad Raznan"+"\n",
 
@@ -377,8 +380,8 @@ func main() {
 		)
 
 		serveCmd := flag.NewFlagSet("serve", flag.ExitOnError)
-		ipAddrPtr := serveCmd.String("address", "localhost:80", "is used to specify the IPv4 address for the server to listen to. (Default: localhost:80)")
-		jsonPathPtr := serveCmd.String("file", "file.json", "JSON_PATH is used to specify a JSON file-based database for simple persistence mechanism")
+		ipAddrPtr := serveCmd.String("address", "localhost:80", "used to specify the IPv4 address and port for the server to listen to.")
+		jsonPathPtr := serveCmd.String("file", "file.json", "accepts a JSON_PATH used to specify a JSON file-based database for simple persistence mechanism.")
 
 		if len(os.Args) > 2 {
 			serveCmd.Parse(os.Args[2:])
