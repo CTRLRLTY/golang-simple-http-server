@@ -8,7 +8,7 @@ must be an IPv4 address or the alias `localhost` which will be expanded to the l
 
 The server uses a JSON file-based database for its non-volatile storage mechanism. 
 It will create a default file.json on the current directory for its runtime storage, 
-and will insert one entry just for keep sake. The argument `--file JSON_PATH` can give specified to use a custom json file.
+and will insert one entry just for keep sake. The argument `--file JSON_PATH` can be specified to use a custom json file.
 
 The server supports the following API:
 - PUT /create-data - Creates data 
