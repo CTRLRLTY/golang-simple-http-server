@@ -217,7 +217,76 @@ func (sh *sharedHandler) handleUpdateData(writer http.ResponseWriter, request *h
 func (sh *sharedHandler) handleDeleteData(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
 	case "DELETE":
-		// Get data
+		var (
+			newVecData  []DataJsonMap
+			deletedData DataJsonMap
+			canDelete   bool
+		)
+
+		qParams, err := url.ParseQuery(request.URL.RawQuery)
+
+		if err != nil {
+			http.Error(writer, ":(", http.StatusBadRequest)
+			return
+		}
+
+		if len(qParams) != 1 {
+			http.Error(writer, ":?<", http.StatusBadRequest)
+			return
+		}
+
+		if qParams.Has("id") {
+			reqDataId, err := strconv.Atoi(qParams.Get("id"))
+
+			if err != nil {
+				http.Error(writer, ":-(", http.StatusBadRequest)
+				return
+			}
+
+			if reqDataId == -1 {
+				sh.vecJsonMap = nil
+				canDelete = true
+			} else {
+				deletedData, canDelete = findData(sh.vecJsonMap, reqDataId)
+			}
+		} else if qParams.Has("name") {
+			reqDataName := qParams.Get("name")
+			deletedData, canDelete = findDataByName(sh.vecJsonMap, reqDataName)
+		}
+
+		if !canDelete {
+			http.Error(writer, ":<", http.StatusBadRequest)
+			return
+		}
+
+		for _, datum := range sh.vecJsonMap {
+			if datum == deletedData {
+				continue
+			}
+
+			newVecData = append(newVecData, datum)
+		}
+
+		sh.mux.Lock()
+		sh.vecJsonMap = newVecData
+
+		jsonBytes, err := json.Marshal(sh.vecJsonMap)
+
+		if err != nil {
+			http.Error(writer, "Sorry :x", http.StatusInternalServerError)
+			return
+		}
+
+		err = os.WriteFile(sh.jsonFilePath, jsonBytes, 0644)
+
+		if err != nil {
+			http.Error(writer, "Sorry :o", http.StatusInternalServerError)
+			return
+		}
+
+		sh.mux.Unlock()
+
+		writer.WriteHeader(http.StatusNoContent)
 	}
 }
 
