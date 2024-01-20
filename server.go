@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const kCREATE_DATA_API = "/create-data"
@@ -52,10 +53,13 @@ func displaySummaryHelp() {
 		filepath.Base(os.Args[0]))
 }
 
-func findData(vecData []DataJsonMap, id int) (data DataJsonMap, found bool) {
+func findData(vecData []DataJsonMap, id int) (data *DataJsonMap, found bool) {
+	var datum *DataJsonMap
 	found = false
 
-	for _, datum := range vecData {
+	for i := range vecData {
+		datum = &vecData[i]
+
 		if id == datum.Id {
 			data = datum
 			found = true
@@ -66,10 +70,13 @@ func findData(vecData []DataJsonMap, id int) (data DataJsonMap, found bool) {
 	return
 }
 
-func findDataByName(vecData []DataJsonMap, name string) (data DataJsonMap, found bool) {
+func findDataByName(vecData []DataJsonMap, name string) (data *DataJsonMap, found bool) {
+	var datum *DataJsonMap
 	found = false
 
-	for _, datum := range vecData {
+	for i := range vecData {
+		datum = &vecData[i]
+
 		if name == datum.Name {
 			data = datum
 			found = true
@@ -86,7 +93,7 @@ func (sh *sharedHandler) handleCreateData(writer http.ResponseWriter, request *h
 		var (
 			reqDataValue string
 			reqDataName  string
-			reqData      DataJsonMap
+			reqData      *DataJsonMap
 			haveData     bool
 		)
 
@@ -117,11 +124,12 @@ func (sh *sharedHandler) handleCreateData(writer http.ResponseWriter, request *h
 
 		if !haveData {
 			reqDataValue = qParams.Get("value")
-			reqData = CreateDataJson(reqDataName, reqDataValue)
+			newData := CreateDataJson(reqDataName, reqDataValue)
+			reqData = &newData
 
 			sh.mux.Lock()
 
-			sh.vecJsonMap = append(sh.vecJsonMap, reqData)
+			sh.vecJsonMap = append(sh.vecJsonMap, *reqData)
 
 			jsonBytes, err := json.Marshal(sh.vecJsonMap)
 
@@ -180,19 +188,19 @@ func (sh *sharedHandler) handleGetData(writer http.ResponseWriter, request *http
 				resVecData = sh.vecJsonMap
 				haveData = true
 			} else {
-				var resData DataJsonMap
+				var resData *DataJsonMap
 				resData, haveData = findData(sh.vecJsonMap, reqDataId)
-				resVecData = []DataJsonMap{resData}
+				resVecData = []DataJsonMap{*resData}
 			}
 		} else if qParams.Has("name") {
 			var (
 				reqDataName string
-				resData     DataJsonMap
+				resData     *DataJsonMap
 			)
 
 			reqDataName = qParams.Get("name")
 			resData, haveData = findDataByName(sh.vecJsonMap, reqDataName)
-			resVecData = []DataJsonMap{resData}
+			resVecData = []DataJsonMap{*resData}
 		} else {
 			http.Error(writer, "3:?<", http.StatusBadRequest)
 			return
@@ -210,7 +218,54 @@ func (sh *sharedHandler) handleGetData(writer http.ResponseWriter, request *http
 func (sh *sharedHandler) handleUpdateData(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
 	case "POST":
-		// Get data
+		var (
+			reqDataValue string
+			reqDataName  string
+			editedData   *DataJsonMap
+			haveData     bool
+		)
+
+		qParams, err := url.ParseQuery(request.URL.RawQuery)
+
+		if err != nil {
+			http.Error(writer, ":(", http.StatusBadRequest)
+			return
+		}
+
+		if !qParams.Has("name") && !qParams.Has("value") {
+			http.Error(writer, ":(", http.StatusBadRequest)
+			return
+		}
+
+		reqDataName = qParams.Get("name")
+		reqDataValue = qParams.Get("value")
+
+		editedData, haveData = findDataByName(sh.vecJsonMap, reqDataName)
+
+		if !haveData {
+			http.Error(writer, ":O", http.StatusBadRequest)
+			return
+		}
+
+		sh.mux.Lock()
+		editedData.Value = reqDataValue
+		editedData.LastModified = time.Now().UTC().Format(http.TimeFormat)
+		jsonBytes, err := json.Marshal(sh.vecJsonMap)
+
+		if err != nil {
+			http.Error(writer, "Sorry :x", http.StatusInternalServerError)
+			return
+		}
+
+		err = os.WriteFile(sh.jsonFilePath, jsonBytes, 0644)
+
+		if err != nil {
+			http.Error(writer, "Sorry :o", http.StatusInternalServerError)
+			return
+		}
+		sh.mux.Unlock()
+
+		writer.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -219,7 +274,7 @@ func (sh *sharedHandler) handleDeleteData(writer http.ResponseWriter, request *h
 	case "DELETE":
 		var (
 			newVecData  []DataJsonMap
-			deletedData DataJsonMap
+			deletedData *DataJsonMap
 			canDelete   bool
 		)
 
@@ -259,12 +314,14 @@ func (sh *sharedHandler) handleDeleteData(writer http.ResponseWriter, request *h
 			return
 		}
 
-		for _, datum := range sh.vecJsonMap {
+		for i := range sh.vecJsonMap {
+			datum := &sh.vecJsonMap[i]
+
 			if datum == deletedData {
 				continue
 			}
 
-			newVecData = append(newVecData, datum)
+			newVecData = append(newVecData, *datum)
 		}
 
 		sh.mux.Lock()
