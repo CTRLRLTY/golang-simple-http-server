@@ -193,7 +193,10 @@ func (sh *sharedHandler) handleGetData(writer http.ResponseWriter, request *http
 			} else {
 				var resData *DataJsonMap
 				resData, haveData = findData(sh.vecJsonMap, reqDataId)
-				resVecData = []DataJsonMap{*resData}
+
+				if haveData {
+					resVecData = []DataJsonMap{*resData}
+				}
 			}
 		} else if qParams.Has("name") {
 			var (
@@ -203,7 +206,10 @@ func (sh *sharedHandler) handleGetData(writer http.ResponseWriter, request *http
 
 			reqDataName = qParams.Get("name")
 			resData, haveData = findDataByName(sh.vecJsonMap, reqDataName)
-			resVecData = []DataJsonMap{*resData}
+
+			if haveData {
+				resVecData = []DataJsonMap{*resData}
+			}
 		} else {
 			http.Error(writer, "3:?<", http.StatusBadRequest)
 			return
