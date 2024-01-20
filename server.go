@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -14,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 const kCREATE_DATA_API = "/create-data"
@@ -44,7 +42,7 @@ func displaySummaryHelp() {
 			"where the 'id' field signifies a unique identifier for a specified entry, and the 'value' field signifies the value of the entry."+"\n"+
 			"\n"+
 			"API USAGE"+"\n"+
-			"	GET /create-data?id=<INT> returns a JSON data entry specified by the 'id' parameter."+"\n"+
+			"	GET /get-data?id=<INT> returns a JSON data entry specified by the 'id' parameter."+"\n"+
 			"Setting the id parameter to -1 will return all JSON entries"+"\n"+
 			"\n"+
 			"	PUT /create-data?value=<STRING> creates a data entry with the specified value."+"\n"+
@@ -68,12 +66,28 @@ func findData(vecData []DataJsonMap, id int) (data DataJsonMap, found bool) {
 	return
 }
 
+func findDataByName(vecData []DataJsonMap, name string) (data DataJsonMap, found bool) {
+	found = false
+
+	for _, datum := range vecData {
+		if name == datum.Name {
+			data = datum
+			found = true
+			break
+		}
+	}
+
+	return
+}
+
 func (sh *sharedHandler) handleCreateData(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
 	case "PUT":
 		var (
 			reqDataValue string
-			newData      DataJsonMap
+			reqDataName  string
+			reqData      DataJsonMap
+			haveData     bool
 		)
 
 		qParams, err := url.ParseQuery(request.URL.RawQuery)
@@ -83,30 +97,51 @@ func (sh *sharedHandler) handleCreateData(writer http.ResponseWriter, request *h
 			return
 		}
 
-		reqDataValue = qParams.Get("value")
-		newData = DataJsonMap{Id: rand.Int(), Value: reqDataValue, LastModified: time.Now().UTC().Format(http.TimeFormat)}
-
-		sh.mux.Lock()
-
-		sh.vecJsonMap = append(sh.vecJsonMap, newData)
-
-		jsonBytes, err := json.Marshal(sh.vecJsonMap)
-
-		if err != nil {
-			http.Error(writer, "Sorry :x", http.StatusInternalServerError)
+		if len(qParams) == 0 || len(qParams) > 2 {
+			http.Error(writer, ":-(", http.StatusBadRequest)
 			return
 		}
 
-		err = os.WriteFile(sh.jsonFilePath, jsonBytes, 0644)
-
-		if err != nil {
-			http.Error(writer, "Sorry :o", http.StatusInternalServerError)
+		if len(qParams) == 2 && !qParams.Has("value") {
+			http.Error(writer, ":)", http.StatusBadRequest)
 			return
 		}
 
-		sh.mux.Unlock()
+		if !qParams.Has("name") {
+			http.Error(writer, ":?(", http.StatusBadRequest)
+			return
+		}
 
-		writer.Header().Set("Content-Location", fmt.Sprintf("%s?id=%d", kREAD_DATA_API, newData.Id))
+		reqDataName = qParams.Get("name")
+		reqData, haveData = findDataByName(sh.vecJsonMap, reqDataName)
+
+		if !haveData {
+			reqDataValue = qParams.Get("value")
+			reqData = CreateDataJson(reqDataName, reqDataValue)
+
+			sh.mux.Lock()
+
+			sh.vecJsonMap = append(sh.vecJsonMap, reqData)
+
+			jsonBytes, err := json.Marshal(sh.vecJsonMap)
+
+			if err != nil {
+				http.Error(writer, "Sorry :x", http.StatusInternalServerError)
+				return
+			}
+
+			err = os.WriteFile(sh.jsonFilePath, jsonBytes, 0644)
+
+			if err != nil {
+				http.Error(writer, "Sorry :o", http.StatusInternalServerError)
+				return
+			}
+
+			sh.mux.Unlock()
+		}
+
+		writer.Header().Set("Content-Location", fmt.Sprintf("%s?id=%d", kREAD_DATA_API, reqData.Id))
+		writer.Header().Set("Last-Modified", reqData.LastModified)
 		writer.WriteHeader(http.StatusCreated)
 	}
 }
@@ -114,7 +149,10 @@ func (sh *sharedHandler) handleCreateData(writer http.ResponseWriter, request *h
 func (sh *sharedHandler) handleGetData(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
 	case "GET":
-		var reqDataId int
+		var (
+			resVecData []DataJsonMap
+			haveData   bool
+		)
 
 		qParams, err := url.ParseQuery(request.URL.RawQuery)
 
@@ -123,25 +161,49 @@ func (sh *sharedHandler) handleGetData(writer http.ResponseWriter, request *http
 			return
 		}
 
-		reqDataId, err = strconv.Atoi(qParams.Get("id"))
-
-		if err != nil {
-			http.Error(writer, ":-(", http.StatusBadRequest)
+		if len(qParams) != 1 {
+			http.Error(writer, ":?<", http.StatusBadRequest)
 			return
 		}
 
-		if reqDataId == -1 {
-			json.NewEncoder(writer).Encode(sh.vecJsonMap)
-		} else {
-			responseData, ok := findData(sh.vecJsonMap, reqDataId)
+		if qParams.Has("id") {
+			var reqDataId int
 
-			if !ok {
-				http.Error(writer, ":O", http.StatusBadRequest)
+			reqDataId, err = strconv.Atoi(qParams.Get("id"))
+
+			if err != nil {
+				http.Error(writer, ":-(", http.StatusBadRequest)
 				return
 			}
 
-			json.NewEncoder(writer).Encode(responseData)
+			if reqDataId == -1 {
+				resVecData = sh.vecJsonMap
+				haveData = true
+			} else {
+				var resData DataJsonMap
+				resData, haveData = findData(sh.vecJsonMap, reqDataId)
+				resVecData = []DataJsonMap{resData}
+			}
+		} else if qParams.Has("name") {
+			var (
+				reqDataName string
+				resData     DataJsonMap
+			)
+
+			reqDataName = qParams.Get("name")
+			resData, haveData = findDataByName(sh.vecJsonMap, reqDataName)
+			resVecData = []DataJsonMap{resData}
+		} else {
+			http.Error(writer, "3:?<", http.StatusBadRequest)
+			return
 		}
+
+		if !haveData {
+			http.Error(writer, ":O", http.StatusBadRequest)
+			return
+		}
+
+		json.NewEncoder(writer).Encode(resVecData)
 	}
 }
 
@@ -226,7 +288,7 @@ func main() {
 		if os.IsNotExist(err) {
 			log.Printf("ERROR: %s does not exist on the current directory, creating...\n", *jsonPathPtr)
 
-			vecJsonMap = []DataJsonMap{CreateDataJson("Some value :3")}
+			vecJsonMap = []DataJsonMap{CreateDataJson("Auriga", "Some value :3")}
 
 			jsonBytes, err = json.Marshal(vecJsonMap)
 
