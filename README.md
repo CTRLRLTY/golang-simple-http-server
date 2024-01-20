@@ -3,7 +3,7 @@ This project is as the repo title stated, a simple http server made in golang. J
 it using the usual command. Running the executable without any commands will print a summarize usage information.
 
 The program accepts one main subcommand: `serve`. It's used to create a HTTP listener on the localhost port 80.
-You can specify a `--listen ADDRESS:PORT` argument to give the server an address and port of your choosing. The `ADDRESS` 
+You can specify a `--address ADDRESS:PORT` argument to give the server an address and port of your choosing. The `ADDRESS` 
 must be an IPv4 address or the alias `localhost` which will be expanded to the loopback address.
 
 The server uses a JSON file-based database for its non-volatile storage mechanism. 
